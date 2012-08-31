@@ -6,12 +6,12 @@ class SASIModelRunner(object):
 
         # Ingest data.
 
-    def setup_dao(dao_type="sa", **kwargs):
+    def setup_dao(self, dao_type="sa", **kwargs):
         if dao_type == 'sa':
             from sasi_model.dao.sasi_sa_dao import SASI_SqlAlchemyDAO
             self.dao = SASI_SqlAlchemyDAO(**kwargs)
 
-    def run_model(self, dao_):
+    def run_model(self):
         # Run model.
         # Return DAO.
         pass
