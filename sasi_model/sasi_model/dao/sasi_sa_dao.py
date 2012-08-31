@@ -1,23 +1,23 @@
 from sasi_model.models import (Cell, Habitat, Substrate, Feature, Gear,
-                               Result, FishingEffort)
+                               Result, Effort)
 from sqlalchemy import (Table, Column, ForeignKey, ForeignKeyConstraint, 
                         Integer, String, Float, PickleType, create_engine, 
                         MetaData)
 from sqlalchemy.orm import (mapper, relationship)
-from geoalchemy import (GeometryExtensionColumn, MultiPolygon, GeometryDDL)
+from geoalchemy import (GeometryExtensionColumn, MultiPolygon, 
+                        GeometryColumn, GeometryDDL)
 
 
 class SASI_SqlAlchemyDAO(object):
 
     def __init__(self, bind=None):
         self.bind = bind
-        self.setup()
-        pass
+        self.setUp()
 
     def setUp(self):
         self.metadata = MetaData()
-        self.schema = generateSchema()
-        self.metadata.create_all()
+        self.schema = self.generateSchema()
+        self.metadata.create_all(bind=self.bind)
 
     def generateSchema(self):
         schema = { 'sources': {} }
@@ -56,7 +56,7 @@ class SASI_SqlAlchemyDAO(object):
                                 Column('id', String, primary_key=True),
                                 Column('name', String)
                                )
-        mapper(Substrate, table)
+        mapper(Substrate, substrate_table)
 
         # Feature.
         feature_table = Table('feature', self.metadata,
@@ -73,10 +73,9 @@ class SASI_SqlAlchemyDAO(object):
                           )
         mapper(Gear, gear_table)
 
-        # Effort.
+        # Fishing Effort.
         effort_table = Table('effort', self.metadata,
                            Column('id', String, primary_key=True),
-                           Column('name', String),
                           )
         mapper(Effort, effort_table)
 

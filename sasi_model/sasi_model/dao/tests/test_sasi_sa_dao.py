@@ -1,3 +1,6 @@
+import pyspatialite
+import sys
+sys.modules['pysqlite2'] = pyspatialite
 import unittest
 from sasi_model.dao.sasi_sa_dao import SASI_SqlAlchemyDAO
 from sqlalchemy import (Table, Column, ForeignKey, ForeignKeyConstraint, 
@@ -10,9 +13,10 @@ class SASI_SqlAlchemyDAOTestCase(unittest.TestCase):
         self.engine = create_engine('sqlite://')
         self.connection = self.engine.connect()
         self.session = scoped_session(sessionmaker(bind=self.connection))
+        self.connection.execute("SELECT InitSpatialMetaData()") 
 
-    def test_foo(self):
-        print self.session
+    def test_setUp(self):
+        dao = SASI_SqlAlchemyDAO(bind=self.connection)
 
 
 if __name__ == '__main__':
