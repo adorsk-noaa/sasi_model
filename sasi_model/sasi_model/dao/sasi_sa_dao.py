@@ -1,5 +1,6 @@
 from sasi_model.models import (Cell, Habitat, Substrate, Feature, Gear,
                                Result, Effort)
+from sa_dao.orm_dao import ORM_DAO
 from sqlalchemy import (Table, Column, ForeignKey, ForeignKeyConstraint, 
                         Integer, String, Float, PickleType, create_engine, 
                         MetaData)
@@ -10,14 +11,15 @@ from geoalchemy import (GeometryExtensionColumn, MultiPolygon,
 
 class SASI_SqlAlchemyDAO(object):
 
-    def __init__(self, bind=None):
-        self.bind = bind
+    def __init__(self, session=None):
+        self.session = session
         self.setUp()
 
     def setUp(self):
         self.metadata = MetaData()
         self.schema = self.generateSchema()
-        self.metadata.create_all(bind=self.bind)
+        self.metadata.create_all(bind=self.session.bind)
+        self.sa_dao = ORM_DAO(session=self.session, schema=self.schema)
 
     def generateSchema(self):
         schema = { 'sources': {} }
