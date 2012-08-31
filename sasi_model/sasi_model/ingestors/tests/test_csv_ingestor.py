@@ -4,10 +4,7 @@ from sasi_model.ingestors.csv_ingestor import CSV_Ingestor
 from sa_dao.orm_dao import ORM_DAO
 from StringIO import StringIO
 import csv
-from sqlalchemy import (Table, Column, ForeignKey, ForeignKeyConstraint, 
-                        Integer, String, Float, PickleType, create_engine, 
-                        MetaData)
-from sqlalchemy.orm import (mapper, relationship)
+from sqlalchemy import Table, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 
 

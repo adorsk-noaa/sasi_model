@@ -61,13 +61,24 @@ class SASIModelRunner(object):
                                    )
             ingestor.ingest()
 
+        shp_sections = [
+            {
+                'id': 'habitats',
+                'class': sasi_models.Habitat,
+                'mappings': [
+                    {'source': 'substrate', 'target': 'substrate'},
+                    {'source': 'energy', 'target': 'energy'},
+                    {'source': 'z', 'target': 'z', 
+                     'processor': lambda value: -1.0 * float(value)},
+                ]
+            }
+        ]
+        for section in shp_sections:
         """
-        'va',
         'habitats',
         'grid',
         'model_parameters',
         'fishing_efforts',
-        'map_layers',
         """
 
     def run_model(self):
