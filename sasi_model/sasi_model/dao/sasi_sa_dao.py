@@ -16,11 +16,8 @@ class SASI_SqlAlchemyDAO(object):
 
     def setUp(self):
         self.metadata = MetaData()
-        # Setup connection.
-        # Setup schema.
         self.schema = generateSchema()
-        print self.schema
-        # Create db tables.
+        self.metadata.create_all()
 
     def generateSchema(self):
         schema = { 'sources': {} }
