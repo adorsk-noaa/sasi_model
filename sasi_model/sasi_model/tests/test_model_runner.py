@@ -22,11 +22,5 @@ class ModelRunner_Test(DBTestCase):
         runner = SASIModelRunner(dao_opts=dao_opts, dataDir=dataDir)
         runner.ingest_data()
 
-        r = runner.dao.query({
-            'SELECT': ['{{Substrate}}']
-        })
-        for s in r:
-            print s.id
-
 if __name__ == '__main__':
     unittest.main()

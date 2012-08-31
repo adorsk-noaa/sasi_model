@@ -1,5 +1,4 @@
-from sasi_model.models import (Cell, Habitat, Substrate, Feature, Gear,
-                               Result, Effort)
+import sasi_model.models as sasi_models 
 from sa_dao.orm_dao import ORM_DAO
 from sqlalchemy import (Table, Column, ForeignKey, ForeignKeyConstraint, 
                         Integer, String, Float, PickleType, create_engine, 
@@ -35,7 +34,7 @@ class SASI_SqlAlchemyDAO(object):
                            GeometryExtensionColumn('geom', MultiPolygon(2)),
                           )
         GeometryDDL(cell_table)
-        mapper(Cell, cell_table, properties = {
+        mapper(sasi_models.Cell, cell_table, properties = {
             'geom': GeometryColumn(cell_table.c.geom),
         })
 
@@ -49,7 +48,7 @@ class SASI_SqlAlchemyDAO(object):
                       GeometryExtensionColumn('geom', MultiPolygon(2)),
                      )
         GeometryDDL(habitat_table)
-        mapper(Habitat, habitat_table, properties = {
+        mapper(sasi_models.Habitat, habitat_table, properties = {
             'geom': GeometryColumn(habitat_table.c.geom),
         })
 
@@ -58,7 +57,7 @@ class SASI_SqlAlchemyDAO(object):
                                 Column('id', String, primary_key=True),
                                 Column('name', String)
                                )
-        mapper(Substrate, substrate_table)
+        mapper(sasi_models.Substrate, substrate_table)
 
         # Feature.
         feature_table = Table('feature', self.metadata,
@@ -66,32 +65,41 @@ class SASI_SqlAlchemyDAO(object):
                               Column('name', String),
                               Column('category', String)
                              )
-        mapper(Feature, feature_table)
+        mapper(sasi_models.Feature, feature_table)
 
         # Gear.
         gear_table = Table('gear', self.metadata,
                            Column('id', String, primary_key=True),
                            Column('name', String),
                           )
-        mapper(Gear, gear_table)
+        mapper(sasi_models.Gear, gear_table)
+
+        # Vulnerability Assessment.
+        va_table = Table('va', self.metadata,
+                           Column('gear_id', String, primary_key=True),
+                           Column('feature_id', String, primary_key=True),
+                           Column('substrate_id', String, primary_key=True),
+                           Column('energy', String, primary_key=True),
+                          )
+        mapper(sasi_models.VulnerabilityAssessment, va_table)
 
         # Fishing Effort.
         effort_table = Table('effort', self.metadata,
                            Column('id', String, primary_key=True),
                           )
-        mapper(Effort, effort_table)
+        mapper(sasi_models.Effort, effort_table)
 
         # Result.
         result_table = Table('result', self.metadata,
                            Column('id', String, primary_key=True),
                            Column('name', String),
                           )
-        mapper(Result, result_table)
+        mapper(sasi_models.Result, result_table)
 
         # Save sources in schema.
-        for clazz in [Cell, Habitat, Substrate, Feature, Gear, Effort, 
-                      Result]:
-            schema['sources'][clazz.__name__] = clazz
+        for model in ['Cell', 'Habitat', 'Substrate', 'Feature', 'Gear',
+                      'Effort', 'VulnerabilityAssessment']:
+            schema['sources'][model] = getattr(sasi_models, model)
 
         return schema
 
