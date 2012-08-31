@@ -11,6 +11,9 @@ class SASIModelRunner(object):
             from sasi_model.dao.sasi_sa_dao import SASI_SqlAlchemyDAO
             self.dao = SASI_SqlAlchemyDAO(**kwargs)
 
+    def ingest_data(self):
+        pass
+
     def run_model(self):
         # Run model.
         # Return DAO.

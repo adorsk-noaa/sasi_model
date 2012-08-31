@@ -98,3 +98,13 @@ class SASI_SqlAlchemyDAO(object):
     def tearDown(self):
         # Remove db tables.
         pass
+
+    def save(self, obj, commit=True):
+        self.sa_dao.save(obj, commit=commit)
+
+    def commit(self):
+        self.sa_dao.commit()
+
+    def query(self, query_def):
+        return self.sa_dao.get_query(query_def)
+
