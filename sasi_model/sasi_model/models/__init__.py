@@ -6,3 +6,4 @@ from gear import Gear
 from effort import Effort
 from vulnerability_assessment import VulnerabilityAssessment
 from result import Result
+from model_parameters import ModelParameters

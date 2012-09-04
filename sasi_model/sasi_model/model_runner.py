@@ -51,6 +51,28 @@ class SASIModelRunner(object):
                     {'source': 'Substrate ID', 'target': 'substrate_id'},
                     {'source': 'Energy', 'target': 'energy'},
                 ]
+            },
+            {
+                'id': 'model_parameters',
+                'class': sasi_models.ModelParameters,
+                'mappings': [
+                    {'source': 'time_start', 'target': 'time_start'},
+                    {'source': 'time_end', 'target': 'time_end'},
+                    {'source': 'time_step', 'target': 'time_step'},
+                    {'source': 't_1', 'target': 't_1'},
+                    {'source': 't_2', 'target': 't_2'},
+                    {'source': 't_3', 'target': 't_3'},
+                    {'source': 'w_1', 'target': 'w_1'},
+                    {'source': 'w_2', 'target': 'w_2'},
+                    {'source': 'w_3', 'target': 'w_3'},
+                    {'source': 'projection', 'target': 'projection',
+                     # Use the mollweide projection as the default.
+                     'default': ("+proj=moll +lon_0=0 +x_0=0 +y_0=0 "
+                                 "+ellps=WGS84 +datum=WGS84 +units=m "
+                                 "+no_defs")
+                    }
+                ],
+                'auto_save' : False
             }
         ]
 
@@ -59,9 +81,12 @@ class SASIModelRunner(object):
                                     "%s.csv" % section['id'])
             ingestor = ingestors.CSV_Ingestor(dao=self.dao, csv_file=csv_file,
                                     clazz=section['class'],
-                                    mappings=section['mappings']
-                                   )
+                                    mappings=section['mappings'],
+                                             )
             ingestor.ingest()
+
+        # Keep a shortcut to the model parameters.
+        self.model_parameters = self.dao.query('{{ModelParameters}}').fetchone()
 
         # Shapefile data.
         shp_sections = [
@@ -91,26 +116,6 @@ class SASIModelRunner(object):
                 shp_file=shp_file, clazz=section['class'], 
                 mappings=section['mappings'] ) 
             ingestor.ingest()
-
-        # Model parameters.
-        params_file = os.path.join(self.dataDir, 'model_parameters', 'data',
-                                   "model_parameters.csv")
-        mappings = []
-        for int_attr in ['time_start', 'time_end', 'time_step']:
-            mappings.append({'source': int_attr, 'target': int_attr,
-                             'processor': lambda value: int(value)})
-
-        for i in range(1,4):
-            for tw in ['t', 'w']:
-                attr = "%s_%s" % (tw, i)
-                mappings.append({'source': attr, 'target': attr,
-                                 'processor': lambda value: float(value)})
-        for str_attr in ['projection']:
-            mappings.append({'source': str_attr, 'target': str_attr})
-
-        ingestor = ingestors.Parameters_Ingestor(csv_file=params_file, 
-                                       mappings=mappings)
-        self.model_parameters = ingestor.ingest()
 
         # Fishing efforts.
         effort_dir = os.path.join(self.dataDir, 'fishing_efforts')
@@ -142,20 +147,20 @@ class SASIModelRunner(object):
             ingestor.ingest()
 
     def process_ingested_data(self):
-        pass
-        # Calculate cell compositions.
-        # Populate fishing effort models.
+        self.calculate_habitat_areas()
+        # HERE! CELL COMPOSITIONS!
 
-    def calculate_cell_compositions(self):
-        # Calculate areas for habitats.
+    def calculate_habitat_areas(self):
         for habitat in self.dao.query('{{Habitat}}'):
             habitat.area = gis_util.get_area_from_wkb(
-                habitat.geom.geom_wkb, 
-                source_proj="EPSG:4326",
-                target_proj=self.model_parameters.get('projection')
+                str(habitat.geom.geom_wkb), 
+                source_proj="+init=epsg:4326",
+                target_proj=str(self.model_parameters.projection)
             )
-            sa.session.add(hab)
-            sa.session.commit()
+            self.dao.save(habitat, commit=False)
+        self.dao.commit()
+
+    def calculate_cell_compositions(self):
 
         # Generate habitat compositions for cells.
         counter = 0

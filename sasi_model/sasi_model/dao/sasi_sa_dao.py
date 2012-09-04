@@ -96,9 +96,25 @@ class SASI_SqlAlchemyDAO(object):
                           )
         mapper(sasi_models.Result, result_table)
 
+        # Model Parameters.
+        parameters_table = Table('parameters', self.metadata,
+                                 Column('id', Integer, primary_key=True),
+                                 Column('time_start', Integer),
+                                 Column('time_end', Integer),
+                                 Column('time_step', Float),
+                                 Column('t_1', Float),
+                                 Column('t_2', Float),
+                                 Column('t_3', Float),
+                                 Column('w_1', Float),
+                                 Column('w_2', Float),
+                                 Column('w_3', Float),
+                                 Column('projection', String),
+                                )
+        mapper(sasi_models.ModelParameters, parameters_table)
+
         # Save sources in schema.
         for model in ['Cell', 'Habitat', 'Substrate', 'Feature', 'Gear',
-                      'Effort', 'VulnerabilityAssessment']:
+                      'Effort', 'VulnerabilityAssessment', 'ModelParameters']:
             schema['sources'][model] = getattr(sasi_models, model)
 
         return schema

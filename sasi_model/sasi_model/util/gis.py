@@ -35,7 +35,7 @@ def reproject_linestring(linestring, p1, p2):
     x2, y2 = transform(p1, p2, x1, y1)
     return geometry.polygon.LineString(zip(x2, y2))
 
-def get_area_from_wkb(wkb_str, source_proj, target_proj):
+def get_area_from_wkb(wkb_str="", source_proj="", target_proj=""):
     shape = wkb.loads(wkb_str)
     proj_shape = reproject_shape(shape, Proj(source_proj), Proj(target_proj))
     return proj_shape.area

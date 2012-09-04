@@ -21,16 +21,7 @@ class ModelRunner_Test(DBTestCase):
         }
         runner = SASIModelRunner(dao_opts=dao_opts, dataDir=dataDir)
         runner.ingest_data()
-
-        dao = runner.dao
-        q = dao.query({
-            'SELECT': '{{Cell}}'
-        })
-        from shapely import wkb, wkt
-        for c in q.all():
-            if (c.geom):
-                s = wkb.loads(str(c.geom.geom_wkb))
-                print s
+        runner.process_ingested_data()
 
 if __name__ == '__main__':
     unittest.main()
