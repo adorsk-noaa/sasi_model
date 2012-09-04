@@ -85,7 +85,7 @@ class SASI_SqlAlchemyDAO(object):
 
         # Fishing Effort.
         effort_table = Table('effort', self.metadata,
-                           Column('id', String, primary_key=True),
+                           Column('id', Integer, primary_key=True),
                           )
         mapper(sasi_models.Effort, effort_table)
 

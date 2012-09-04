@@ -26,6 +26,11 @@ class ModelRunner_Test(DBTestCase):
         q = dao.query({
             'SELECT': '{{Cell}}'
         })
+        from shapely import wkb, wkt
+        for c in q.all():
+            if (c.geom):
+                s = wkb.loads(str(c.geom.geom_wkb))
+                print s
 
 if __name__ == '__main__':
     unittest.main()
