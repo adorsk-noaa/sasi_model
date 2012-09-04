@@ -1,4 +1,4 @@
-from sasi_model.ingestors import CSV_Ingestor
+import sasi_model.ingestors as ingestors 
 import sasi_model.models as sasi_models
 import os
 
@@ -55,12 +55,13 @@ class SASIModelRunner(object):
         for section in csv_sections:
             csv_file = os.path.join(self.dataDir, section['id'], 'data',
                                     "%s.csv" % section['id'])
-            ingestor = CSV_Ingestor(dao=self.dao, csv_file=csv_file,
+            ingestor = ingestors.CSV_Ingestor(dao=self.dao, csv_file=csv_file,
                                     clazz=section['class'],
                                     mappings=section['mappings']
                                    )
             ingestor.ingest()
 
+        # Shapefile data.
         shp_sections = [
             {
                 'id': 'habitats',
@@ -71,15 +72,49 @@ class SASIModelRunner(object):
                     {'source': 'z', 'target': 'z', 
                      'processor': lambda value: -1.0 * float(value)},
                 ]
+            },
+            {
+                'id': 'grid',
+                'class': sasi_models.Cell,
+                'mappings': [
+                    {'source': 'type', 'target': 'type'},
+                    {'source': 'type_id', 'target': 'type_id'},
+                ]
             }
         ]
         for section in shp_sections:
+            shp_file = os.path.join(self.dataDir, section['id'], 'data',
+                                    "%s.shp" % section['id'])
+            ingestor = ingestors.Shapefile_Ingestor(dao=self.dao,
+                shp_file=shp_file, clazz=section['class'], 
+                mappings=section['mappings'] ) 
+            ingestor.ingest()
+
+        # Model parameters.
+        params_file = os.path.join(self.dataDir, 'model_parameters', 'data',
+                                   "model_parameters.csv")
+        mappings = []
+        for int_attr in ['time_start', 'time_end', 'time_step']:
+            mappings.append({'source': int_attr, 'target': int_attr,
+                             'processor': lambda value: int(value)})
+
+        for i in range(1,4):
+            for tw in ['t', 'w']:
+                attr = "%s_%s" % (tw, i)
+                mappings.append({'source': attr, 'target': attr,
+                                 'processor': lambda value: float(value)})
+
+        ingestor = ingestors.Parameters_Ingestor(csv_file=params_file, 
+                                       mappings=mappings)
+        model_parameters = ingestor.ingest()
+
+        # Fishing efforts.
+
         """
-        'habitats',
-        'grid',
-        'model_parameters',
         'fishing_efforts',
         """
+
+        # Fishing effort data.
 
     def run_model(self):
         # Run model.

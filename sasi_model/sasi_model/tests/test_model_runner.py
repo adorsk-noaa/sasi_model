@@ -22,5 +22,10 @@ class ModelRunner_Test(DBTestCase):
         runner = SASIModelRunner(dao_opts=dao_opts, dataDir=dataDir)
         runner.ingest_data()
 
+        dao = runner.dao
+        q = dao.query({
+            'SELECT': '{{Cell}}'
+        })
+
 if __name__ == '__main__':
     unittest.main()
