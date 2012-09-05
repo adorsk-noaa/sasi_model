@@ -50,6 +50,8 @@ class SASIModelRunner(object):
                     {'source': 'Feature ID', 'target': 'feature_id'},
                     {'source': 'Substrate ID', 'target': 'substrate_id'},
                     {'source': 'Energy', 'target': 'energy'},
+                    {'source': 'S', 'target': 's'},
+                    {'source': 'R', 'target': 'r'},
                 ]
             },
             {
@@ -72,7 +74,6 @@ class SASIModelRunner(object):
                                  "+no_defs")
                     }
                 ],
-                'auto_save' : False
             }
         ]
 
@@ -94,9 +95,9 @@ class SASIModelRunner(object):
                 'id': 'habitats',
                 'class': sasi_models.Habitat,
                 'mappings': [
-                    {'source': 'substrate', 'target': 'substrate'},
-                    {'source': 'energy', 'target': 'energy'},
-                    {'source': 'z', 'target': 'z', 
+                    {'source': 'SUBSTRATE', 'target': 'substrate'},
+                    {'source': 'ENERGY', 'target': 'energy'},
+                    {'source': 'Z', 'target': 'z', 
                      'processor': lambda value: -1.0 * float(value)},
                 ]
             },
@@ -104,8 +105,8 @@ class SASIModelRunner(object):
                 'id': 'grid',
                 'class': sasi_models.Cell,
                 'mappings': [
-                    {'source': 'type', 'target': 'type'},
-                    {'source': 'type_id', 'target': 'type_id'},
+                    {'source': 'TYPE', 'target': 'type'},
+                    {'source': 'TYPE_ID', 'target': 'type_id'},
                 ]
             }
         ]
@@ -126,20 +127,9 @@ class SASIModelRunner(object):
         if self.effort_model_type == 'realized':
             csv_file = os.path.join(effort_dir, 'data', 'fishing_efforts.csv')
             mappings = []
-            for int_attr in ['cell_id', 'time']:
-                mappings.append({
-                    'source': int_attr, 'target': int_attr, 
-                    'processor': lambda value: int(value)
-                })
-            for float_attr in ['swept_area', 'hours_fished']:
-                mappings.append({
-                    'source': float_attr, 'target': float_attr, 
-                    'processor': lambda value: float(value)
-                })
-            for str_attr in ['gear']:
-                mappings.append({
-                    'source': str_attr, 'target': str_attr, 
-                })
+            for attr in ['cell_id', 'time', 'swept_area', 'hours_fished',
+                             'gear']:
+                mappings.append({ 'source': attr, 'target': attr, })
             ingestor = ingestors.CSV_Ingestor(dao=self.dao, csv_file=csv_file,
                                     clazz=sasi_models.Effort,
                                     mappings=mappings
@@ -148,46 +138,50 @@ class SASIModelRunner(object):
 
     def process_ingested_data(self):
         self.calculate_habitat_areas()
-        # HERE! CELL COMPOSITIONS!
+        self.calculate_cell_compositions()
 
     def calculate_habitat_areas(self):
         for habitat in self.dao.query('{{Habitat}}'):
-            habitat.area = gis_util.get_area_from_wkb(
+            habitat.area = gis_util.get_area(
                 str(habitat.geom.geom_wkb), 
-                source_proj="+init=epsg:4326",
                 target_proj=str(self.model_parameters.projection)
             )
             self.dao.save(habitat, commit=False)
         self.dao.commit()
 
     def calculate_cell_compositions(self):
-
-        # Generate habitat compositions for cells.
-        counter = 0
-        for cell in cells_dao.all():
-            if conf.conf['verbose']:
-                if (counter % 100) == 0: print >> sys.stderr, "at cell # %s" % counter
-
+        for cell in self.dao.query('{{Cell}}'):
             composition = {}
+            cell.area = gis_util.get_area(
+                str(cell.geom.geom_wkb),
+                target_proj=str(self.model_parameters.projection)
+            )
 
-            # Get cell area.
-            cell_area_entity = geo_func.area(func.geography(Cell.geom))
-            cell.area = sa.session.query(cell_area_entity).filter(Cell.id == cell.id).one()[0]
+            intersecting_habitats = self.dao.query({
+                'SELECT': '{{Habitat}}',
+                'WHERE':  [
+                    ['func.st_intersects({{Habitat.geom}}, {{Cell.geom}})', '==', True],
+                    ['{{Cell.id}}', '==', cell.id]
+                ]
+            })
 
-            # Get habitats which intersect the cell.
-            intersection_area_entity = geo_func.area(func.geography(geo_func.intersection(Habitat.geom, cell.geom)))
-            results = sa.session.query(Habitat, intersection_area_entity).filter(Habitat.geom.intersects(cell.geom)).all()
-            for result in results:
-                hab = result[0]
-                intersection_area = result[1]
-                hab_key = (hab.substrate, hab.energy,)
+            for habitat in intersecting_habitats:
+                intersection = gis_util.get_intersection(
+                    str(habitat.geom.geom_wkb),
+                    str(cell.geom.geom_wkb),
+                )
+                intersection_area = gis_util.get_area(
+                    str(intersection),
+                    target_proj=str(self.model_parameters.projection)
+                )
+                hab_key = (habitat.substrate, habitat.energy,)
                 pct_area = intersection_area/cell.area
                 composition[hab_key] = composition.get(hab_key, 0) + pct_area
 
+            # @todo Calculate average depth here too.
             cell.habitat_composition = composition
-            sa.session.add(cell)
-
-            counter += 1
+            self.dao.save(cell, commit=False)
+        self.dao.commit()
 
     def run_model(self):
         # Run model.

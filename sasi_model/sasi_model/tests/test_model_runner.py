@@ -3,6 +3,7 @@ import sasi_model.tests
 from sasi_model.tests.db_testcase import DBTestCase
 from sasi_model.dao.sasi_sa_dao import SASI_SqlAlchemyDAO
 from sasi_model.model_runner import SASIModelRunner
+from sasi_model.tests.generate_test_data import generate_data
 import os
 
 
@@ -11,9 +12,7 @@ class ModelRunner_Test(DBTestCase):
         DBTestCase.setUp(self)
 
     def test_ModelRunner(self):
-        dataDir = os.path.join(
-            os.path.dirname(sasi_model.tests.__file__), 
-            "test_data", "config_1")
+        dataDir = generate_data()
 
         dao_opts = {
             'dao_type': 'sa',
