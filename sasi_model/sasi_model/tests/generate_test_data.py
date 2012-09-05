@@ -2,7 +2,6 @@ import tempfile
 import os
 import csv
 import fiona
-import random
 import shapely.geometry
 import shapely.wkb
 import sasi_model.util.gis as gis_util
@@ -80,15 +79,15 @@ def generate_data(data_dir="", time_start=0, time_end=10, time_step=1):
 
     hab_records = []
     i = 0
-    for j in range(grid_size):
-        for k in range(grid_size):
+    for j in range(-2, grid_size + 2):
+        for k in range(-2, grid_size + 2):
             x = j * 2
             y = k * 2
             substrate_data = sections['substrates']['data']
             substrate = substrate_data[i % len(substrate_data)]['id']
             energy_data = sections['energies']['data']
             energy = energy_data[i % len(energy_data)]['id']
-            z = -1.0 * random.randint(0,100)
+            z = -1.0 * i
             coords = [[x,y], [x, y+2], [x+2, y+2], [x+2, y], [x,y]]
             hab_records.append({
                 'id': i,

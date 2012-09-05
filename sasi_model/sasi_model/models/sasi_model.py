@@ -1,10 +1,12 @@
-import sasi.conf as conf
-from sasi.domain import Result
+import sasi_model.conf as conf
+from sasi.models import Result
 import sys
 
 class SASI_Model(object):
 
-    def __init__(self, t0=0, tf=10, dt=1, cell_source=None, feature_source=None, effort_model=None, va=None, taus=None, omegas=None):
+    def __init__(self, dao=None, t0=0, tf=10, dt=1, taus=None, omegas=None):
+        # Data access object.
+        self.dao = dao
 
         # Start time.
         self.t0 = t0
@@ -15,21 +17,9 @@ class SASI_Model(object):
         # Timestep.
         self.dt = dt
 
-        # Cells.
-        self.cell_source = cell_source
-
-        # Features.
-        self.feature_source = feature_source
-
         # Get feature categories.
         # @TODO: get categories from config or VA.
         self.feature_categories = ['2']
-
-        # Fishing effort model.
-        self.effort_model = effort_model
-
-        # Vulnerability Assessment
-        self.va = va
 
         # tau (stochastic modifier for recovery)
         if not taus:
@@ -53,6 +43,7 @@ class SASI_Model(object):
 
         # Results, grouped by time and cell.
         self.results_t_c = {}
+
         # Results, as a list.
         self.results = []
 
@@ -63,19 +54,73 @@ class SASI_Model(object):
         This method creates lookups which can speed up model runs.
         """
 
-        # Get habitat types, grouped by gear categories that can be applied to those
+        # Get habitat types, grouped by gears that can be applied to those
         # habitat types. 
         if conf.conf['verbose']: print >> sys.stderr, "Getting habitats by gear categories..."
-        self.ht_by_gcat = self.va.get_habitats_by_gear_categories()
+        self.ht_by_g = {} 
+        for row in self.dao.query({
+            'SELECT': [
+                {
+                    'ID': 's', 
+                    'EXPRESSION': '{{VulnerabilityAssessment.substrate_id}}'
+                },
+                {
+                    'ID': 'e', 
+                    'EXPRESSION': '{{VulnerabilityAssessment.energy}}'
+                },
+                {
+                    'ID': 'g', 
+                    'EXPRESSION': '{{VulnerabilityAssessment.gear_id}}'}
+            ],
+            'GROUP_BY': [{'ID': 'g'}]
+        }):
+            self.ht_by_g[(row.s, row.e,)] = row.g
 
         # Get feature codes, grouped by gear categories that can be applied to those
         # feature types.
         if conf.conf['verbose']: print >> sys.stderr, "Getting features by gear categories..."
-        self.f_by_gcat = self.va.get_features_by_gear_categories()
+        self.f_by_g = {}
+        for row in self.dao.query({
+            'SELECT': [
+                {
+                    'ID': 'f', 
+                    'EXPRESSION': '{{VulnerabilityAssessment.feature_id}}'
+                },
+                {
+                    'ID': 'g', 
+                    'EXPRESSION': '{{VulnerabilityAssessment.gear_id}}'
+                }
+            ],
+            'GROUP_BY': [{'ID': 'g'}]
+        }):
+            self.f_by_g[row.f] = row.g
 
-        # Get features grouped by category, keyed by habitat types.
+        # Get features grouped by category and habitat types.
         if conf.conf['verbose']: print >> sys.stderr, "Getting features by gear categories..."
-        self.f_by_ht = self.va.get_features_by_habitats()
+        self.f_by_ht = {}
+        for row in self.dao.query({
+            'SELECT': [
+                {
+                    'ID': 'f', 
+                    'EXPRESSION': '{{va_feature.feature_id}}'
+                },
+                {
+                    'ID': 'fc', 
+                    'EXPRESSION': '{{va_feature.gear_id}}'
+                }
+                {
+                    'ID': 's', 
+                    'EXPRESSION': '{{va_feature.substrate_id}}'
+                },
+                {
+                    'ID': 'e', 
+                    'EXPRESSION': '{{va_feature.energy}}'
+                },
+            ],
+            'GROUP_BY': [{'ID': 'g'}]
+        }):
+
+        self.va.get_features_by_habitats()
 
         # Create feature lookup to improve perfomance.
         if conf.conf['verbose']: print >> sys.stderr, "Creating features lookup..."

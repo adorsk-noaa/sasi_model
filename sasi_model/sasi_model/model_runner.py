@@ -139,6 +139,7 @@ class SASIModelRunner(object):
     def process_ingested_data(self):
         self.calculate_habitat_areas()
         self.calculate_cell_compositions()
+        # @TODO: Setup fishing efforts here.
 
     def calculate_habitat_areas(self):
         for habitat in self.dao.query('{{Habitat}}'):
@@ -152,11 +153,15 @@ class SASIModelRunner(object):
     def calculate_cell_compositions(self):
         for cell in self.dao.query('{{Cell}}'):
             composition = {}
+            cell.z = 0
+
+            # Calculate cell area.
             cell.area = gis_util.get_area(
                 str(cell.geom.geom_wkb),
                 target_proj=str(self.model_parameters.projection)
             )
 
+            # Calculate habitat composition.
             intersecting_habitats = self.dao.query({
                 'SELECT': '{{Habitat}}',
                 'WHERE':  [
@@ -177,9 +182,9 @@ class SASIModelRunner(object):
                 hab_key = (habitat.substrate, habitat.energy,)
                 pct_area = intersection_area/cell.area
                 composition[hab_key] = composition.get(hab_key, 0) + pct_area
-
-            # @todo Calculate average depth here too.
+                cell.z += pct_area * habitat.z
             cell.habitat_composition = composition
+
             self.dao.save(cell, commit=False)
         self.dao.commit()
 
