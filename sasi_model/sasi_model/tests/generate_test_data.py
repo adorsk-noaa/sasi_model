@@ -44,11 +44,15 @@ def generate_data(data_dir="", time_start=0, time_end=10, time_step=1):
     sections['model_parameters'] = {
         'id': 'model_parameters',
         'type': 'csv',
-        'fields': ['time_start', 'time_end', 'time_step', 't_1', 't_2',
-                   't_3', 'w_1', 'w_2', 'w_3', 'projection'],
+        'fields': ['time_start', 'time_end', 'time_step', 
+                   't_0', 't_1', 't_2', 't_3', 
+                   'w_0', 'w_1', 'w_2', 'w_3', 
+                   'projection'],
         'data': [{'time_start': time_start, 'time_end': time_end, 'time_step':
-                  time_step, 't_1': 1, 't_2': 2, 't_3': 3, 'w_1': 1, 'w_2': .2, 
-                  'w_3':.3, 'projection': None}]
+                  time_step, 
+                  't_0': 0, 't_1': 1, 't_2': 2, 't_3': 3, 
+                  'w_0': 0, 'w_1': .1, 'w_2': .2, 'w_3':.3, 
+                  'projection': None}]
     }
 
 

@@ -81,11 +81,13 @@ class SASI_SqlAlchemyDAO(object):
                            Column('substrate_id', String, primary_key=True),
                            Column('energy', String, primary_key=True),
                           )
-        mapper(sasi_models.VulnerabilityAssessment, va_table)
+        mapper(sasi_models.VA, va_table)
 
         # Fishing Effort.
         effort_table = Table('effort', self.metadata,
                            Column('id', Integer, primary_key=True),
+                           Column('cell_id', Integer),
+                           Column('time', Integer),
                           )
         mapper(sasi_models.Effort, effort_table)
 
@@ -101,10 +103,12 @@ class SASI_SqlAlchemyDAO(object):
                                  Column('id', Integer, primary_key=True),
                                  Column('time_start', Integer),
                                  Column('time_end', Integer),
-                                 Column('time_step', Float),
+                                 Column('time_step', Integer),
+                                 Column('t_0', Float),
                                  Column('t_1', Float),
                                  Column('t_2', Float),
                                  Column('t_3', Float),
+                                 Column('w_0', Float),
                                  Column('w_1', Float),
                                  Column('w_2', Float),
                                  Column('w_3', Float),
@@ -114,7 +118,7 @@ class SASI_SqlAlchemyDAO(object):
 
         # Save sources in schema.
         for model in ['Cell', 'Habitat', 'Substrate', 'Feature', 'Gear',
-                      'Effort', 'VulnerabilityAssessment', 'ModelParameters']:
+                      'Effort', 'VA', 'ModelParameters']:
             schema['sources'][model] = getattr(sasi_models, model)
 
         return schema

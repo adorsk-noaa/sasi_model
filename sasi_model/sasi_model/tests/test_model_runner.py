@@ -21,6 +21,7 @@ class ModelRunner_Test(DBTestCase):
         runner = SASIModelRunner(dao_opts=dao_opts, dataDir=dataDir)
         runner.ingest_data()
         runner.process_ingested_data()
+        runner.run_model()
 
 if __name__ == '__main__':
     unittest.main()

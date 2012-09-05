@@ -1,8 +1,8 @@
 import sasi_model.conf as conf
-from sasi.models import Result
+from sasi_model.models import Result
 import sys
 
-class SASI_Model(object):
+class SASIModel(object):
 
     def __init__(self, dao=None, t0=0, tf=10, dt=1, taus=None, omegas=None):
         # Data access object.
@@ -60,21 +60,14 @@ class SASI_Model(object):
         self.ht_by_g = {} 
         for row in self.dao.query({
             'SELECT': [
-                {
-                    'ID': 's', 
-                    'EXPRESSION': '{{VulnerabilityAssessment.substrate_id}}'
-                },
-                {
-                    'ID': 'e', 
-                    'EXPRESSION': '{{VulnerabilityAssessment.energy}}'
-                },
-                {
-                    'ID': 'g', 
-                    'EXPRESSION': '{{VulnerabilityAssessment.gear_id}}'}
+                {'ID': 's', 'EXPRESSION': '{{VA.substrate_id}}' },
+                {'ID': 'e', 'EXPRESSION': '{{VA.energy}}' },
+                {'ID': 'g', 'EXPRESSION': '{{VA.gear_id}}'} 
             ],
-            'GROUP_BY': [{'ID': 'g'}]
+            'GROUP_BY': [{'ID': 's'}, {'ID': 'e'}, {'ID': 'g'}]
         }):
-            self.ht_by_g[(row.s, row.e,)] = row.g
+            hts = self.ht_by_g.setdefault(row.g, [])
+            hts.append((row.s, row.e,))
 
         # Get feature codes, grouped by gear categories that can be applied to those
         # feature types.
@@ -82,58 +75,52 @@ class SASI_Model(object):
         self.f_by_g = {}
         for row in self.dao.query({
             'SELECT': [
-                {
-                    'ID': 'f', 
-                    'EXPRESSION': '{{VulnerabilityAssessment.feature_id}}'
-                },
-                {
-                    'ID': 'g', 
-                    'EXPRESSION': '{{VulnerabilityAssessment.gear_id}}'
-                }
+                {'ID': 'f', 'EXPRESSION': '{{VA.feature_id}}'},
+                {'ID': 'g', 'EXPRESSION': '{{VA.gear_id}}' }
             ],
-            'GROUP_BY': [{'ID': 'g'}]
+            'GROUP_BY': [{'ID': 'f'}, {'ID': 'g'}]
         }):
             self.f_by_g[row.f] = row.g
 
         # Get features grouped by category and habitat types.
         if conf.conf['verbose']: print >> sys.stderr, "Getting features by gear categories..."
-        self.f_by_ht = {}
+        self.f_by_ht_fc= {}
         for row in self.dao.query({
             'SELECT': [
-                {
-                    'ID': 'f', 
-                    'EXPRESSION': '{{va_feature.feature_id}}'
-                },
-                {
-                    'ID': 'fc', 
-                    'EXPRESSION': '{{va_feature.gear_id}}'
-                }
-                {
-                    'ID': 's', 
-                    'EXPRESSION': '{{va_feature.substrate_id}}'
-                },
-                {
-                    'ID': 'e', 
-                    'EXPRESSION': '{{va_feature.energy}}'
-                },
+                {'ID': 'f', 'EXPRESSION': '{{VA.feature_id}}'},
+                {'ID': 'fc', 'EXPRESSION': '{{Feature.category}}'},
+                {'ID': 's', 'EXPRESSION': '{{VA.substrate_id}}' }, 
+                {'ID': 'e', 'EXPRESSION': '{{VA.energy}}' },
             ],
-            'GROUP_BY': [{'ID': 'g'}]
+            'FROM': [
+                {'SOURCE': 'VA', 'JOINS': [
+                    ['Feature', [
+                        {'TYPE': 'ENTITY', 
+                         'EXPRESSION': '{{VA.feature_id}}'},
+                        '==',
+                        {'TYPE': 'ENTITY', 
+                         'EXPRESSION': '{{Feature.id}}'},
+                    ]]
+                ]}
+            ],
+            'GROUP_BY': [{'ID': 'f'}, {'ID': 'fc'}, {'ID': 's'}, {'ID': 'e'}]
         }):
+            ht = (row.s, row.e,)
+            ht_fcs = self.f_by_ht_fc.setdefault(ht, {})
+            fc = ht_fcs.setdefault(row.fc, [])
+            fc.append(row.f)
 
-        self.va.get_features_by_habitats()
-
-        # Create feature lookup to improve perfomance.
+        # Create feature lookup.
         if conf.conf['verbose']: print >> sys.stderr, "Creating features lookup..."
         self.features = {}
-        for f in self.feature_source.all():
+        for f in self.dao.query('{{Feature}}'):
             self.features[f.id] = f
 
-        # Create cells-habitat_type-feature lookup to improve perfomance.
-        # Assumes static habitats.
+        # Create cells-habitat_type-feature lookup.
         if conf.conf['verbose']: print >> sys.stderr, "Creating cells-habitat_type-feature lookup..."
         self.c_ht_f = self.get_c_ht_f_lookup()
 
-        # Create effort lookup by cell and time to improve performance.
+        # Create effort lookup by cell and time.
         if conf.conf['verbose']: print >> sys.stderr, "Creating cells-time-effort lookup..."
         self.c_t_e = self.get_c_t_e_lookup()
 
@@ -150,7 +137,7 @@ class SASI_Model(object):
         c_ht_f = {}
 
         # For each cell...
-        for c in self.cell_source.all():
+        for c in self.dao.query('{{Cell}}'):
 
             # Create entry in c_ht_f for cell.
             c_ht_f[c] = {
@@ -160,22 +147,20 @@ class SASI_Model(object):
             # For each habitat type in the cell's habitat composition...
             for ht, pct_area in c.habitat_composition.items():
 
-                ht_key = ','.join(ht)
-
                 # Create entry for ht in c_ht_f.
-                c_ht_f[c]['ht'][ht_key] = {}
+                c_ht_f[c]['ht'][ht] = {}
 
                 # Save percent area.
-                c_ht_f[c]['ht'][ht_key]['percent_cell_area'] = pct_area
+                c_ht_f[c]['ht'][ht]['percent_cell_area'] = pct_area
 
                 # Calculate habitat type area.
-                c_ht_f[c]['ht'][ht_key]['area'] = c.area * pct_area
+                c_ht_f[c]['ht'][ht]['area'] = c.area * pct_area
 
                 # Get features for habitat, grouped by featured category.
-                c_ht_f[c]['ht'][ht_key]['f'] = {}
-                for feature_category, feature_ids in self.f_by_ht[ht_key].items():
+                c_ht_f[c]['ht'][ht]['f'] = {}
+                for feature_category, feature_ids in self.f_by_ht_fc[ht].items():
                     features = [self.features[f_id] for f_id in feature_ids]
-                    c_ht_f[c]['ht'][ht_key]['f'][feature_category] = features 
+                    c_ht_f[c]['ht'][ht]['f'][feature_category] = features 
 
         return c_ht_f
 
@@ -186,18 +171,22 @@ class SASI_Model(object):
 
         # For each effort in the model's time range...
         effort_counter = 0
-        for e in self.effort_model.get_efforts(filters=[
-            {'field': 'time', 'op': '>=', 'value': self.t0},
-            {'field': 'time', 'op': '<=', 'value': self.tf},
-            ]):
-
+        for e in self.dao.query({
+            'SELECT': '{{Effort}}',
+            'WHERE': [
+                [{'TYPE': 'ENTITY', 'EXPRESSION': '{{Effort.time}}'},
+                 '>=', self.t0],
+                [{'TYPE': 'ENTITY', 'EXPRESSION': '{{Effort.time}}'},
+                 '<=', self.tf],
+            ]
+        }):
             effort_counter += 1
             if conf.conf['verbose']: 
                 if (effort_counter % 1000) == 0: print >> sys.stderr, "effort: %s" % effort_counter
 
 
             # Create cell-time key.
-            c_t_key = (e.cell, e.time)
+            c_t_key = (e.cell_id, e.time)
 
             # Initialize lookup entries for cell-time key, if not existing.
             c_t_e.setdefault(c_t_key, [])

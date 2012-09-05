@@ -44,7 +44,7 @@ class SASIModelRunner(object):
             },
             {
                 'id': 'va',
-                'class': sasi_models.VulnerabilityAssessment,
+                'class': sasi_models.VA,
                 'mappings': [
                     {'source': 'Gear ID', 'target': 'gear_id'},
                     {'source': 'Feature ID', 'target': 'feature_id'},
@@ -61,9 +61,11 @@ class SASIModelRunner(object):
                     {'source': 'time_start', 'target': 'time_start'},
                     {'source': 'time_end', 'target': 'time_end'},
                     {'source': 'time_step', 'target': 'time_step'},
+                    {'source': 't_0', 'target': 't_0'},
                     {'source': 't_1', 'target': 't_1'},
                     {'source': 't_2', 'target': 't_2'},
                     {'source': 't_3', 'target': 't_3'},
+                    {'source': 'w_0', 'target': 'w_0'},
                     {'source': 'w_1', 'target': 'w_1'},
                     {'source': 'w_2', 'target': 'w_2'},
                     {'source': 'w_3', 'target': 'w_3'},
@@ -165,8 +167,12 @@ class SASIModelRunner(object):
             intersecting_habitats = self.dao.query({
                 'SELECT': '{{Habitat}}',
                 'WHERE':  [
-                    ['func.st_intersects({{Habitat.geom}}, {{Cell.geom}})', '==', True],
-                    ['{{Cell.id}}', '==', cell.id]
+                    [{'TYPE': 'ENTITY', 
+                      'EXPRESSION': ('func.st_intersects({{Habitat.geom}},'
+                                     '{{Cell.geom}})')
+                     }, '==', True],
+                    [{'TYPE': 'ENTITY', 'EXPRESSION': '{{Cell.id}}'}, 
+                     '==', cell.id]
                 ]
             })
 
@@ -189,6 +195,15 @@ class SASIModelRunner(object):
         self.dao.commit()
 
     def run_model(self):
-        # Run model.
-        # Return DAO.
-        pass
+        t0 = self.model_parameters.time_start
+        tf = self.model_parameters.time_end
+        dt = self.model_parameters.time_step
+
+        taus = {}
+        omegas = {}
+        for i in range(4):
+            taus["%s" % i] = getattr(self.model_parameters, 't_%s' % i)
+            omegas["%s" % i] = getattr(self.model_parameters, 'w_%s' % i)
+
+        m = sasi_models.SASIModel(dao=self.dao, t0=t0, tf=tf, dt=dt,
+                                            taus=taus, omegas=omegas)
