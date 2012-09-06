@@ -17,10 +17,6 @@ class SASIModel(object):
         # Timestep.
         self.dt = dt
 
-        # Get feature categories.
-        # @TODO: get categories from config or VA.
-        self.feature_categories = ['2']
-
         # tau (stochastic modifier for recovery)
         if not taus:
             taus = {
@@ -29,7 +25,7 @@ class SASIModel(object):
                     '2' : 5,
                     '3' : 10
                     }
-            self.taus = taus
+        self.taus = taus
 
         # omega (stochastic modifier for damage)
         if not omegas:
@@ -39,7 +35,7 @@ class SASIModel(object):
                     '2' : .50,
                     '3' : 1
                     }
-            self.omegas = omegas
+        self.omegas = omegas
 
         # Results, grouped by time and cell.
         self.results_t_c = {}
@@ -80,11 +76,12 @@ class SASIModel(object):
             ],
             'GROUP_BY': [{'ID': 'f'}, {'ID': 'g'}]
         }):
-            self.f_by_g[row.f] = row.g
+            fs = self.f_by_g.setdefault(row.g, [])
+            fs.append(row.f)
 
         # Get features grouped by category and habitat types.
         if conf.conf['verbose']: print >> sys.stderr, "Getting features by gear categories..."
-        self.f_by_ht_fc= {}
+        self.f_by_ht_fc = {}
         for row in self.dao.query({
             'SELECT': [
                 {'ID': 'f', 'EXPRESSION': '{{VA.feature_id}}'},
@@ -116,53 +113,61 @@ class SASIModel(object):
         for f in self.dao.query('{{Feature}}'):
             self.features[f.id] = f
 
-        # Create cells-habitat_type-feature lookup.
+        # Create cells-habitat_type-feature_category-feature lookup.
         if conf.conf['verbose']: print >> sys.stderr, "Creating cells-habitat_type-feature lookup..."
-        self.c_ht_f = self.get_c_ht_f_lookup()
+        self.c_ht_fc_f = self.get_c_ht_fc_f_lookup()
 
         # Create effort lookup by cell and time.
         if conf.conf['verbose']: print >> sys.stderr, "Creating cells-time-effort lookup..."
         self.c_t_e = self.get_c_t_e_lookup()
 
+        # Create va lookup.
+        self.vas = {}
+        for va in self.dao.query('{{VA}}'):
+            key = (va.gear_id, va.substrate_id, va.energy, va.feature_id)
+            self.vas[key] = va
+
         # Initialize results, grouped by time and cell.
         if conf.conf['verbose']: print >> sys.stderr, "Initializing results..."
         for t in range(self.t0, self.tf + self.dt, self.dt):
             self.results_t_c[t] = {}
-            for c in self.c_ht_f.keys():
+            for c in self.c_ht_fc_f.keys():
                 self.results_t_c[t][c] = {}
 
-    def get_c_ht_f_lookup(self):
+    def get_c_ht_fc_f_lookup(self):
 
         # Initialize cell-habitat_type-feature lookup.
-        c_ht_f = {}
+        c_ht_fc_f = {}
 
         # For each cell...
         for c in self.dao.query('{{Cell}}'):
 
             # Create entry in c_ht_f for cell.
-            c_ht_f[c] = {
-                    'ht': {}
-                    }
+            c_ht_fc_f[c.id] = {
+                'ht': {}
+            }
 
             # For each habitat type in the cell's habitat composition...
             for ht, pct_area in c.habitat_composition.items():
 
                 # Create entry for ht in c_ht_f.
-                c_ht_f[c]['ht'][ht] = {}
+                c_ht_fc_f[c.id]['ht'][ht] = {}
 
                 # Save percent area.
-                c_ht_f[c]['ht'][ht]['percent_cell_area'] = pct_area
+                c_ht_fc_f[c.id]['ht'][ht]['percent_cell_area'] = pct_area
 
                 # Calculate habitat type area.
-                c_ht_f[c]['ht'][ht]['area'] = c.area * pct_area
+                c_ht_fc_f[c.id]['ht'][ht]['area'] = c.area * pct_area
 
                 # Get features for habitat, grouped by featured category.
-                c_ht_f[c]['ht'][ht]['f'] = {}
+                c_ht_fc_f[c.id]['ht'][ht]['fc'] = {}
                 for feature_category, feature_ids in self.f_by_ht_fc[ht].items():
-                    features = [self.features[f_id] for f_id in feature_ids]
-                    c_ht_f[c]['ht'][ht]['f'][feature_category] = features 
+                    features = {}
+                    for f_id in feature_ids:
+                        features[f_id] = self.features[f_id]
+                    c_ht_fc_f[c.id]['ht'][ht]['fc'][feature_category] = features
 
-        return c_ht_f
+        return c_ht_fc_f
 
     def get_c_t_e_lookup(self):
 
@@ -189,10 +194,10 @@ class SASIModel(object):
             c_t_key = (e.cell_id, e.time)
 
             # Initialize lookup entries for cell-time key, if not existing.
-            c_t_e.setdefault(c_t_key, [])
+            es = c_t_e.setdefault(c_t_key, [])
 
             # Add effort to lookup.	
-            c_t_e[c_t_key].append(e)
+            es.append(e)
 
         return c_t_e
 
@@ -203,14 +208,22 @@ class SASIModel(object):
         for t in range(self.t0, self.tf + 1, self.dt):
             self.iterate(t)
 
+        # Save results.
+        self.dao.save_all(self.results)
+
     def iterate(self, t):
+        if conf.conf['verbose']:
+            print >> sys.stderr, "time: %s" % t
+
+        result_counter = 0
 
         # For each cell...
         cell_counter = 0
-        for c in self.c_ht_f.keys():
+        for c in self.c_ht_fc_f.keys():
 
             if conf.conf['verbose']:
-                if (cell_counter % 100) == 0: print >> sys.stderr, "\tc: %s" % cell_counter
+                if (cell_counter % 100) == 0: 
+                    print >> sys.stderr, "\tc: %s" % cell_counter
 
             cell_counter += 1
 
@@ -222,65 +235,68 @@ class SASIModel(object):
 
                 # Get cell's habitat types which are relevant to the effort.
                 relevant_habitat_types = []
-                for ht in self.c_ht_f[c]['ht'].keys():
-                    if ht in self.ht_by_gcat[effort.gear.category]: relevant_habitat_types.append(ht)
+                for ht in self.c_ht_fc_f[c]['ht'].keys():
+                    if ht in self.ht_by_g[effort.gear_id]: 
+                        relevant_habitat_types.append(ht)
 
                 # If there were relevant habitat types...
                 if relevant_habitat_types:
 
                     # Calculate the total area of the relevant habitats.
-                    relevant_habitats_area = sum([self.c_ht_f[c]['ht'][ht]['area'] for ht in relevant_habitat_types])
+                    relevant_habitats_area = sum(
+                        [self.c_ht_fc_f[c]['ht'][ht]['area'] 
+                         for ht in relevant_habitat_types])
 
                     # For each habitat type...
                     for ht in relevant_habitat_types:
 
-                        # Distribute the effort's swept area proportionally to the habitat type's area as a fraction of the total relevant area.
-                        swept_area_per_habitat_type = effort.swept_area * (self.c_ht_f[c]['ht'][ht]['area']/relevant_habitats_area)
+                        # Distribute the effort's swept area proportionally 
+                        # to the habitat type's area as a fraction of the 
+                        # total relevant area.
+                        ht_area = self.c_ht_fc_f[c]['ht'][ht]['area']
+                        ht_swept_area = effort.swept_area * (
+                            ht_area/relevant_habitats_area)
 
                         # Distribute swept area equally across feature categories.
-                        # @TODO: maybe weight this? rather than just num categories?
-                        swept_area_per_feature_category = swept_area_per_habitat_type/len(self.feature_categories)
+                        fcs = self.c_ht_fc_f[c]['ht'][ht]['fc'].keys()
+                        fc_swept_area = ht_swept_area/len(fcs)
 
                         # For each feature category...
-                        for fc in self.feature_categories:
+                        for fc in fcs:
 
                             # Get the features for which the gear can be applied. 
                             relevant_features = []
-                            for f in self.c_ht_f[c]['ht'][ht]['f'].get(fc,[]):
-                                if f.id in self.f_by_gcat[effort.gear.category]: relevant_features.append(f)
+                            for f in self.c_ht_fc_f[c]['ht'][ht]['fc'][fc].values():
+                                if f.id in self.f_by_g[effort.gear_id]: 
+                                    relevant_features.append(f)
 
                             # If there were relevant features...
                             if relevant_features:
 
                                 # Distribute the category's effort equally over the features.
-                                swept_area_per_feature = swept_area_per_feature_category/len(relevant_features)
+                                f_swept_area = fc_swept_area/len(relevant_features)
 
                                 # For each feature...
                                 for f in relevant_features:
 
                                     # Get vulnerability assessment for the effort.
-                                    vulnerability_assessment = self.va.get_assessment(
-                                            gear_category = effort.gear.category,
-                                            habitat_key = ht,
-                                            feature_code = f.id,
-                                            )
+                                    va = self.vas[(effort.gear_id, ht[0], ht[1], f.id)]
 
-                                    # Get stochastic modifiers 
-                                    omega = self.omegas.get(vulnerability_assessment['S'])
-                                    tau = self.taus.get(vulnerability_assessment['R'])
+                                    # Get modifiers.
+                                    omega = self.omegas[va.s]
+                                    tau = self.taus[va.r]
 
                                     # Get or create the result corresponding to the
                                     # current set of parameters.
-                                    result_key = (ht, effort.gear, f)
-                                    (substrate_id,energy_id) = ht.split(',')
+                                    result_key = (ht[0], ht[1], effort.gear_id, f.id)
                                     result = self.get_or_create_result(t, c, result_key)
 
                                     # Add the resulting contact-adjusted
                                     # swept area to the a field.
-                                    result.a += swept_area_per_feature
+                                    result.a += f_swept_area
 
                                     # Calculate adverse effect swept area and add to y field.
-                                    adverse_effect_swept_area = swept_area_per_feature * omega
+                                    adverse_effect_swept_area = f_swept_area * omega
                                     result.y += adverse_effect_swept_area
 
                                     # Calculate recovery per timestep.
@@ -298,30 +314,30 @@ class SASIModel(object):
                                     # Update znet
                                     result.znet += result.z
 
-                                    # End of the iteration.
+                                    # End of iteration.
 
-    def get_or_create_result(self, t, cell, result_key):
-        (substrate_id,energy_id) = result_key[0].split(',')
-        gear = result_key[1]
-        feature = result_key[2]
+    def get_or_create_result(self, t, cell_id, result_key):
+        substrate_id = result_key[0]
+        energy_id = result_key[1]
+        gear_id = result_key[2]
+        feature_id = result_key[3]
         # If result for key does not exist yet, create it and
         # add it to the lookup and list.
-        if not self.results_t_c[t][cell].has_key(result_key):
+        if not self.results_t_c[t][cell_id].has_key(result_key):
             new_result = Result(
                     t=t,
-                    cell_id=cell.id,
-                    gear_id=gear.id,
+                    cell_id=cell_id,
+                    gear_id=gear_id,
                     substrate_id=substrate_id,
                     energy_id=energy_id,
-                    feature_id=feature.id,
+                    feature_id=feature_id,
                     a=0.0,
                     x=0.0,
                     y=0.0,
                     z=0.0,
                     znet=0.0
                     )
-            self.results_t_c[t][cell][result_key] = new_result
+            self.results_t_c[t][cell_id][result_key] = new_result
             self.results.append(new_result)
 
-        return self.results_t_c[t][cell][result_key]
-
+        return self.results_t_c[t][cell_id][result_key]

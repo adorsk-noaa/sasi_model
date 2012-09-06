@@ -129,8 +129,7 @@ class SASIModelRunner(object):
         if self.effort_model_type == 'realized':
             csv_file = os.path.join(effort_dir, 'data', 'fishing_efforts.csv')
             mappings = []
-            for attr in ['cell_id', 'time', 'swept_area', 'hours_fished',
-                             'gear']:
+            for attr in ['cell_id', 'time', 'swept_area', 'gear_id']:
                 mappings.append({ 'source': attr, 'target': attr, })
             ingestor = ingestors.CSV_Ingestor(dao=self.dao, csv_file=csv_file,
                                     clazz=sasi_models.Effort,
@@ -149,7 +148,7 @@ class SASIModelRunner(object):
                 str(habitat.geom.geom_wkb), 
                 target_proj=str(self.model_parameters.projection)
             )
-            self.dao.save(habitat, commit=False)
+            self.dao.save(habitat, auto_commit=False)
         self.dao.commit()
 
     def calculate_cell_compositions(self):
@@ -191,7 +190,7 @@ class SASIModelRunner(object):
                 cell.z += pct_area * habitat.z
             cell.habitat_composition = composition
 
-            self.dao.save(cell, commit=False)
+            self.dao.save(cell, auto_commit=False)
         self.dao.commit()
 
     def run_model(self):
@@ -202,8 +201,11 @@ class SASIModelRunner(object):
         taus = {}
         omegas = {}
         for i in range(4):
-            taus["%s" % i] = getattr(self.model_parameters, 't_%s' % i)
-            omegas["%s" % i] = getattr(self.model_parameters, 'w_%s' % i)
+            taus[i] = getattr(self.model_parameters, 't_%s' % i)
+            omegas[i] = getattr(self.model_parameters, 'w_%s' % i)
 
         m = sasi_models.SASIModel(dao=self.dao, t0=t0, tf=tf, dt=dt,
                                             taus=taus, omegas=omegas)
+        m.run()
+        for r in self.dao.query('{{Result}}'):
+            print r

@@ -67,8 +67,8 @@ def generate_data(data_dir="", time_start=0, time_end=10, time_step=1):
                         'Feature ID': f['id'],
                         'Substrate ID': s['id'],
                         'Energy': e['id'],
-                        'S': i % 3,
-                        'R': i % 3,
+                        'S': (i % 3) + 1,
+                        'R': (i % 3) + 1,
                     })
                     i += 1
     sections['va'] = {
@@ -163,14 +163,14 @@ def generate_data(data_dir="", time_start=0, time_end=10, time_step=1):
                     'cell_id': cell_record['id'],
                     'time': t,
                     'swept_area': cell_area/num_gears,
-                    'gear': g['id']
+                    'gear_id': g['id']
                 })
 
     sections['fishing_efforts'] = {
         'id': 'fishing_efforts',
         'type': 'fishing_efforts',
         'model_type': 'realized',
-        'fields': ['cell_id', 'time', 'swept_area', 'hours_fished', 'gear'],
+        'fields': ['cell_id', 'time', 'swept_area', 'gear_id'],
         'data': fishing_efforts_data
     }
 

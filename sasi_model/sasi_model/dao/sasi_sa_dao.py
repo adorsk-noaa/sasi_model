@@ -80,6 +80,8 @@ class SASI_SqlAlchemyDAO(object):
                            Column('feature_id', String, primary_key=True),
                            Column('substrate_id', String, primary_key=True),
                            Column('energy', String, primary_key=True),
+                           Column('s', Integer),
+                           Column('r', Integer),
                           )
         mapper(sasi_models.VA, va_table)
 
@@ -87,14 +89,27 @@ class SASI_SqlAlchemyDAO(object):
         effort_table = Table('effort', self.metadata,
                            Column('id', Integer, primary_key=True),
                            Column('cell_id', Integer),
+                           Column('gear_id', String),
+                           Column('swept_area', Float),
+                           Column('hours_fished', Float),
                            Column('time', Integer),
                           )
         mapper(sasi_models.Effort, effort_table)
 
         # Result.
         result_table = Table('result', self.metadata,
-                           Column('id', String, primary_key=True),
-                           Column('name', String),
+                           Column('id', Integer, primary_key=True),
+                           Column('t', Integer),
+                           Column('cell_id', Integer),
+                           Column('gear_id', String),
+                           Column('substrate_id', String),
+                           Column('energy_id', String),
+                           Column('feature_id', String),
+                           Column('a', Float),
+                           Column('x', Float),
+                           Column('y', Float),
+                           Column('z', Float),
+                           Column('znet', Float),
                           )
         mapper(sasi_models.Result, result_table)
 
@@ -104,10 +119,10 @@ class SASI_SqlAlchemyDAO(object):
                                  Column('time_start', Integer),
                                  Column('time_end', Integer),
                                  Column('time_step', Integer),
-                                 Column('t_0', Float),
-                                 Column('t_1', Float),
-                                 Column('t_2', Float),
-                                 Column('t_3', Float),
+                                 Column('t_0', Integer),
+                                 Column('t_1', Integer),
+                                 Column('t_2', Integer),
+                                 Column('t_3', Integer),
                                  Column('w_0', Float),
                                  Column('w_1', Float),
                                  Column('w_2', Float),
@@ -118,7 +133,7 @@ class SASI_SqlAlchemyDAO(object):
 
         # Save sources in schema.
         for model in ['Cell', 'Habitat', 'Substrate', 'Feature', 'Gear',
-                      'Effort', 'VA', 'ModelParameters']:
+                      'Effort', 'VA', 'ModelParameters', 'Result']:
             schema['sources'][model] = getattr(sasi_models, model)
 
         return schema
@@ -127,11 +142,18 @@ class SASI_SqlAlchemyDAO(object):
         # Remove db tables.
         pass
 
-    def save(self, obj, commit=True):
-        self.sa_dao.save(obj, commit=commit)
+    def save(self, obj, auto_commit=True):
+        self.sa_dao.session.add(obj)
+        if auto_commit:
+            self.sa_dao.session.commit()
+
+    def save_all(self, objs, auto_commit=True):
+        self.sa_dao.session.add_all(objs)
+        if auto_commit:
+            self.sa_dao.session.commit()
 
     def commit(self):
-        self.sa_dao.commit()
+        self.sa_dao.session.commit()
 
     def query(self, query_def):
         return self.sa_dao.get_query(query_def)
