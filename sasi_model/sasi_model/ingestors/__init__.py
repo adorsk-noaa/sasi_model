@@ -1,2 +1,0 @@
-from csv_ingestor import CSV_Ingestor
-from shapefile_ingestor import Shapefile_Ingestor
