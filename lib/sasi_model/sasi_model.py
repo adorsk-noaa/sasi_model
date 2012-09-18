@@ -1,4 +1,3 @@
-from sasi_data.models import Result
 import sys
 
 
@@ -213,11 +212,11 @@ class SASI_Model(object):
 
                                     # Add the resulting contact-adjusted
                                     # swept area to the a field.
-                                    result.a += f_swept_area
+                                    result['a'] += f_swept_area
 
                                     # Calculate adverse effect swept area and add to y field.
                                     adverse_effect_swept_area = f_swept_area * omega
-                                    result.y += adverse_effect_swept_area
+                                    result['y'] += adverse_effect_swept_area
 
                                     # Calculate recovery per timestep.
                                     recovery_per_dt = adverse_effect_swept_area/tau
@@ -226,13 +225,13 @@ class SASI_Model(object):
                                     for future_t in range(t + 1, t + tau + 1, self.dt):
                                         if future_t <= self.tf:
                                             future_result = self.get_or_create_result(future_t, c, result_key)
-                                            future_result.x += recovery_per_dt
+                                            future_result['x'] += recovery_per_dt
 
                                     # Calculate Z.
-                                    result.z = result.x - result.y
+                                    result['z'] = result['x'] - result['y']
 
                                     # Update znet
-                                    result.znet += result.z
+                                    result['znet'] += result['z']
 
                                     # End of iteration.
 
@@ -243,19 +242,19 @@ class SASI_Model(object):
         feature_id = result_key[3]
 
         if not self.results_t_c[t][cell_id].has_key(result_key):
-            new_result = Result(
-                    t=t,
-                    cell_id=cell_id,
-                    gear_id=gear_id,
-                    substrate_id=substrate_id,
-                    energy_id=energy_id,
-                    feature_id=feature_id,
-                    a=0.0,
-                    x=0.0,
-                    y=0.0,
-                    z=0.0,
-                    znet=0.0
-                    )
+            new_result = {
+                't': t,
+                'cell_id' : cell_id,
+                'gear_id' : gear_id,
+                'substrate_id': substrate_id,
+                'energy_id': energy_id,
+                'feature_id' : feature_id,
+                'a': 0.0,
+                'x': 0.0,
+                'y': 0.0,
+                'z': 0.0,
+                'znet': 0.0
+            }
             self.results_t_c[t][cell_id][result_key] = new_result
             self.results.append(new_result)
 
