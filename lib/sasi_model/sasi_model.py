@@ -1,11 +1,14 @@
-import sys
+import logging
 
 
 class SASI_Model(object):
 
     def __init__(self, t0=0, tf=10, dt=1, taus=None, omegas=None,
                  cells=None, features=None, efforts=None, vas=None,
-                 opts={}):
+                 logger=logging.getLogger()):
+
+        self.logger = logger
+
         self.t0 = t0 # Start time
         self.tf = tf # End time
         self.dt = dt # Time step
@@ -34,9 +37,6 @@ class SASI_Model(object):
         self.efforts = efforts
         self.vas = vas # Vulnerability Assessments
 
-        # Other options e.g. 'verbose'.
-        self.opts = opts
-
         # Results, grouped by time and cell.
         self.results_t_c = {}
 
@@ -57,8 +57,7 @@ class SASI_Model(object):
             self.va_lu[key] = va
 
         # Group habitat types by gears to which they can be applied.
-        if self.opts.get('verbose'): 
-            print >> sys.stderr, "Grouping habitats by gears..."
+        self.logger.info("Grouping habitats by gears...")
         self.ht_by_g = {} 
         for va in self.vas:
             ht = (va.substrate_id, va.energy_id,)
@@ -66,24 +65,20 @@ class SASI_Model(object):
             gear_hts.add(ht)
 
         # Group features by gears to which they can be applied.
-        if self.opts.get('verbose'): 
-            print >> sys.stderr, "Grouping features by gears..."
+        self.logger.info("Grouping features by gears...")
         self.f_by_g = {}
         for va in self.vas:
             gear_fs = self.f_by_g.setdefault(va.gear_id, set())
             gear_fs.add(va.feature_id)
 
         # Create feature lookup.
-        if self.opts.get('verbose'): 
-            print >> sys.stderr, "Creating features lookup..."
+        self.logger.info("Creating features lookup...")
         self.features_lu = {}
         for f in self.features:
             self.features_lu[f.id] = f
 
         # Group features by category and habitat types.
-        if self.opts.get('verbose'): 
-            print >> sys.stderr, ("Grouping features by categories and"
-                                  " habitats...")
+        self.logger.info("Grouping features by categories and habitats...")
         self.f_by_ht_fc = {}
         for va in self.vas:
             ht = (va.substrate_id, va.energy_id,)
@@ -95,19 +90,13 @@ class SASI_Model(object):
 
 
         # Create cells-habitat_type-feature_category-feature lookup.
-        if self.opts.get('verbose'): 
-            print >> sys.stderr, ("Creating cells-habitat_type-"
-                                  "feature_category-feature lookup...")
         self.c_ht_fc_f = self.get_c_ht_fc_f_lookup()
 
         # Create effort lookup by cell and time.
-        if self.opts.get('verbose'): 
-            print >> sys.stderr, "Creating cells-time-effort lookup..."
         self.c_t_e = self.get_c_t_e_lookup()
 
         # Initialize results, grouped by time and cell.
-        if self.opts.get('verbose'): 
-            print >> sys.stderr, "Initializing results..."
+        self.logger.info("Initializing results...")
         for t in range(self.t0, self.tf + self.dt, self.dt):
             self.results_t_c[t] = {}
             for c in self.c_ht_fc_f.keys():
@@ -115,6 +104,9 @@ class SASI_Model(object):
 
     def get_c_ht_fc_f_lookup(self):
         """ Create cells-habitat_type-feature_category-feature lookup. """
+
+        self.logger.info(("Creating cells-habitat_type-feature_category-"
+                          "feature lookup..."))
         c_ht_fc_f = {}
         for c in self.cells:
             c_ht_fc_f[c.id] = { 'ht': {} }
@@ -129,13 +121,20 @@ class SASI_Model(object):
 
     def get_c_t_e_lookup(self):
         """ Create cells-time-effort lookup. """
+
+        base_msg = "Creating cells-time-effort lookup..."
+        self.logger.info(base_msg)
+
         c_t_e = {}
         effort_counter = 0
+        num_efforts = len(self.efforts)
         for e in self.efforts:
             effort_counter += 1
-            if self.opts.get('verbose'): 
-                if (effort_counter % 1000) == 0: 
-                    print >> sys.stderr, "effort: %s" % effort_counter
+            if (effort_counter % 1000) == 0: 
+                self.logger.info(base_msg + "effort #%d of %d (%.1f%%)" % (
+                    effort_counter, num_efforts, 
+                    (1.0 * effort_counter/num_efforts) * 100
+                ))
             c_t = (e.cell_id, e.time,)
             es = c_t_e.setdefault(c_t, [])
             es.append(e)
@@ -145,19 +144,21 @@ class SASI_Model(object):
         for t in range(self.t0, self.tf + 1, self.dt):
             self.iterate(t)
 
-    def iterate(self, t):
-        if self.opts.get('verbose'):
-            print >> sys.stderr, "time: %s" % t
+    def iterate(self, t, log_interval=1000):
+        base_msg = "Iterating, time = %s..." % t
+        self.logger.info(base_msg)
 
         result_counter = 0
 
         cell_counter = 0
-        for c in self.c_ht_fc_f.keys():
-
-            if self.opts.get('verbose'):
-                if (cell_counter % 100) == 0: 
-                    print >> sys.stderr, "\tc: %s" % cell_counter
+        cells = self.c_ht_fc_f.keys()
+        num_cells = len(cells)
+        for c in cells:
             cell_counter += 1
+            if (cell_counter % log_interval) == 0: 
+               self.logger.info(base_msg + (" cell #%d of %d (%.1f%%)" % (
+                   cell_counter, num_cells, 1.0 * cell_counter/num_cells * 100))
+               )
 
             cell_efforts = self.c_t_e.get((c,t),[])
 
@@ -219,7 +220,10 @@ class SASI_Model(object):
                                     result['y'] += adverse_effect_swept_area
 
                                     # Calculate recovery per timestep.
-                                    recovery_per_dt = adverse_effect_swept_area/tau
+                                    if tau == 0:
+                                        recovery_per_dt = 0
+                                    else:
+                                        recovery_per_dt = adverse_effect_swept_area/tau
 
                                     # Add recovery to x field for future entries.
                                     for future_t in range(t + 1, t + tau + 1, self.dt):
