@@ -5,9 +5,10 @@ import logging
 class SASI_Model(object):
 
     def __init__(self, t0=0, tf=10, dt=1, taus=None, omegas=None, dao=None, 
-                 logger=logging.getLogger()):
+                 logger=logging.getLogger(), config={}):
 
         self.logger = logger
+        self.config = {}
 
         self.t0 = t0 # Start time
         self.tf = tf # End time
@@ -102,7 +103,7 @@ class SASI_Model(object):
                     c_ht_fc_f[c.id]['ht'][ht]['fc'][fc] = fs
         return c_ht_fc_f
 
-    def run(self, log_interval=1, commit=True):
+    def run(self, log_interval=1, commit=True, commit_interval=100):
         self.logger.info("Iterating through cells...")
         # We partition by cells to avoid overloading memory.
         # 'Cuz there can be a lotta data...
@@ -209,9 +210,14 @@ class SASI_Model(object):
             for results in cell_results.values():
                 for result in results.values():
                     self.dao.save(result, auto_commit=False)
-            if commit:
+            if commit and commit_interval and \
+               (cell_counter % commit_interval) == 0:
                 self.dao.commit()
             # End of cell block
+
+        # Do any remaining commits.
+        if commit:
+            self.dao.commit()
 
     def get_efforts_for_cell_by_t(self, cell_id):
         """ Get efforts cell, grouped by time. """
