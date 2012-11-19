@@ -1,4 +1,3 @@
-from sasi_data.dao.sasi_sa_dao import SASI_SqlAlchemyDAO
 import logging
 
 
