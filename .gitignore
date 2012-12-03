@@ -1,6 +1,7 @@
 py2.7
 
 *.py[co]
+*.class
 
 # Packages
 *.egg
