@@ -105,7 +105,7 @@ class SASI_Model(object):
 
     def run(self, log_interval=1, commit=True, **kwargs):
 
-        batch_size = kwargs.get('batch_size', 100)
+        batch_size = kwargs.get('batch_size', getattr(self, 'batch_size', 100))
 
         self.logger.info("Iterating through cells...")
         # We partition by cells to avoid overloading memory.
@@ -223,8 +223,10 @@ class SASI_Model(object):
                     for result in time_results.values():
                         self.dao.save(result, auto_commit=False)
             if commit:
+                self.logger.info('saving partial results...')
                 self.dao.commit()
             # End of batch block.
+        self.logger.info('Run completed.')
 
     def get_effort_cache(self, cell_ids):
         """ Get efforts cache, grouped by cell and time. """
