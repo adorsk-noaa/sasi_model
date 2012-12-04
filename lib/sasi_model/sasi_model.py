@@ -102,148 +102,145 @@ class SASI_Model(object):
                     c_ht_fc_f[c.id]['ht'][ht]['fc'][fc] = fs
         return c_ht_fc_f
 
-    def run(self, log_interval=1, commit=True, commit_interval=100):
+    def run(self, log_interval=1, commit=True, batch_size=100):
         self.logger.info("Iterating through cells...")
         # We partition by cells to avoid overloading memory.
         # 'Cuz there can be a lotta data...
+        Cell = self.dao.schema['sources']['Cell']
+        cell_q = self.dao.session.query(Cell).order_by(Cell.id)
         cell_counter = 0
-        cells = self.c_ht_fc_f.keys()
-        num_cells = len(cells)
-        for c in cells:
+        num_cells = cell_q.count()
 
-            cell_counter += 1
-            if (cell_counter % log_interval) == 0: 
-               self.logger.info("cell #%d of %d (%.1f%%)" % (
-                   cell_counter, num_cells, 1.0 * cell_counter/num_cells * 100))
+        # Caches for cells, to speed up lookups.
+        while cell_counter < num_cells:
+            cell_batch = cell_q.offset(cell_counter).limit(batch_size).all()
+            cell_ids = [cell.id for cell in cell_batch]
 
-            # Get a local cache of results and efforts for the cell.
-            cell_results = self.get_results_for_cell_by_t_rkey(c)
-            cell_efforts = self.get_efforts_for_cell_by_t(c)
+            # Get a local cache of results and efforts for the current batch.
+            effort_cache = self.get_effort_cache(cell_ids)
+            result_cache = self.get_result_cache(cell_ids)
 
-            for t in range(self.t0, self.tf + 1, self.dt):
-                for effort in cell_efforts[t]:
+            for c in cell_ids:
 
-                    # Get relevant habitat types for the effort.
-                    relevant_habitat_types = []
-                    for ht in self.c_ht_fc_f[c]['ht'].keys():
-                        if ht in self.ht_by_g[effort.gear_id]: 
-                            relevant_habitat_types.append(ht)
+                cell_counter += 1
+                if (cell_counter % log_interval) == 0: 
+                   self.logger.info("cell #%d of %d (%.1f%%)" % (
+                       cell_counter, num_cells, 1.0 * cell_counter/num_cells * 100))
 
-                    if relevant_habitat_types:
-                        # Get combined area of relevant habitats.
-                        relevant_habitats_area = sum(
-                            [self.c_ht_fc_f[c]['ht'][ht]['area'] 
-                             for ht in relevant_habitat_types])
+                for t in range(self.t0, self.tf + 1, self.dt):
+                    for effort in effort_cache.get(c, {}).get(t, []):
 
-                        # For each relevant habitat...
-                        for ht in relevant_habitat_types:
+                        # Get relevant habitat types for the effort.
+                        relevant_habitat_types = []
+                        for ht in self.c_ht_fc_f[c]['ht'].keys():
+                            if ht in self.ht_by_g[effort.gear_id]: 
+                                relevant_habitat_types.append(ht)
 
-                            # Distribute the effort's swept area proportionally 
-                            # to the habitat type's area as a fraction of the 
-                            # total relevant area.
-                            ht_area = self.c_ht_fc_f[c]['ht'][ht]['area']
-                            ht_swept_area = effort.swept_area * (
-                                ht_area/relevant_habitats_area)
+                        if relevant_habitat_types:
+                            # Get combined area of relevant habitats.
+                            relevant_habitats_area = sum(
+                                [self.c_ht_fc_f[c]['ht'][ht]['area'] 
+                                 for ht in relevant_habitat_types])
 
-                            # Distribute swept area equally across feature categories.
-                            fcs = self.c_ht_fc_f[c]['ht'][ht]['fc'].keys()
-                            fc_swept_area = ht_swept_area/len(fcs)
+                            # For each relevant habitat...
+                            for ht in relevant_habitat_types:
 
-                            for fc in fcs:
+                                # Distribute the effort's swept area proportionally 
+                                # to the habitat type's area as a fraction of the 
+                                # total relevant area.
+                                ht_area = self.c_ht_fc_f[c]['ht'][ht]['area']
+                                ht_swept_area = effort.swept_area * (
+                                    ht_area/relevant_habitats_area)
 
-                                relevant_features = []
-                                for f in self.c_ht_fc_f[c]['ht'][ht]['fc'][fc]:
-                                    if f in self.f_by_g[effort.gear_id]: 
-                                        relevant_features.append(f)
+                                # Distribute swept area equally across feature categories.
+                                fcs = self.c_ht_fc_f[c]['ht'][ht]['fc'].keys()
+                                fc_swept_area = ht_swept_area/len(fcs)
 
-                                if relevant_features:
+                                for fc in fcs:
 
-                                    # Distribute the category's effort equally over the features.
-                                    f_swept_area = fc_swept_area/len(relevant_features)
+                                    relevant_features = []
+                                    for f in self.c_ht_fc_f[c]['ht'][ht]['fc'][fc]:
+                                        if f in self.f_by_g[effort.gear_id]: 
+                                            relevant_features.append(f)
 
-                                    for f in relevant_features:
+                                    if relevant_features:
 
-                                        # Get vulnerability assessment for the effort.
-                                        va = self.va_lu[(effort.gear_id, ht[0], ht[1], f)]
+                                        # Distribute the category's effort equally over the features.
+                                        f_swept_area = fc_swept_area/len(relevant_features)
 
-                                        omega = self.omegas[va.s]
-                                        tau = self.taus[va.r]
+                                        for f in relevant_features:
 
-                                        result_key = (ht[0], ht[1], effort.gear_id, f)
-                                        result = self.get_or_create_result(
-                                            cell_results, t, c, result_key)
+                                            # Get vulnerability assessment for the effort.
+                                            va = self.va_lu[(effort.gear_id, ht[0], ht[1], f)]
 
-                                        # Add the resulting contact-adjusted
-                                        # swept area to the a field.
-                                        result.a += f_swept_area
+                                            omega = self.omegas[va.s]
+                                            tau = self.taus[va.r]
 
-                                        # Calculate adverse effect swept area and add to y field.
-                                        adverse_effect_swept_area = f_swept_area * omega
-                                        result.y += adverse_effect_swept_area
+                                            result_key = (ht[0], ht[1], effort.gear_id, f)
+                                            result = self.get_or_create_result(
+                                                result_cache, t, c, result_key)
 
-                                        # Calculate recovery per timestep.
-                                        if tau == 0:
-                                            recovery_per_dt = 0
-                                        else:
-                                            recovery_per_dt = adverse_effect_swept_area/tau
+                                            # Add the resulting contact-adjusted
+                                            # swept area to the a field.
+                                            result.a += f_swept_area
 
-                                        # Add recovery to x field for future entries.
-                                        for future_t in range(t + 1, t + tau + 1, self.dt):
-                                            if future_t <= self.tf:
-                                                future_result = self.get_or_create_result(
-                                                    cell_results, future_t, c, result_key)
-                                                future_result.x += recovery_per_dt
+                                            # Calculate adverse effect swept area and add to y field.
+                                            adverse_effect_swept_area = f_swept_area * omega
+                                            result.y += adverse_effect_swept_area
 
-                                        # Calculate Z.
-                                        result.z = result.x - result.y
+                                            # Calculate recovery per timestep.
+                                            if tau == 0:
+                                                recovery_per_dt = 0
+                                            else:
+                                                recovery_per_dt = adverse_effect_swept_area/tau
 
-                                        # Update znet
-                                        result.znet += result.z
+                                            # Add recovery to x field for future entries.
+                                            for future_t in range(t + 1, t + tau + 1, self.dt):
+                                                if future_t <= self.tf:
+                                                    future_result = self.get_or_create_result(
+                                                        result_cache, future_t, c, result_key)
+                                                    future_result.x += recovery_per_dt
 
-                                # End of feature block
-                    # End of habitats block
-                # End of efforts block
-            # End of timestep block
+                                            # Calculate Z.
+                                            result.z = result.x - result.y
+
+                                            # Update znet
+                                            result.znet += result.z
+
+                                        # End of feature block
+                            # End of habitats block
+                        # End of efforts block
+                    # End of timestep block
+                # End of cell block
 
             # Save results.
-            for results in cell_results.values():
-                for result in results.values():
-                    self.dao.save(result, auto_commit=False)
-            if commit and commit_interval and \
-               (cell_counter % commit_interval) == 0:
+            for cell_results in result_cache.values():
+                for time_results in cell_results.values():
+                    for result in time_results.values():
+                        self.dao.save(result, auto_commit=False)
+            if commit:
                 self.dao.commit()
-            # End of cell block
+            # End of batch block.
 
-        # Do any remaining commits.
-        if commit:
-            self.dao.commit()
-
-    def get_efforts_for_cell_by_t(self, cell_id):
-        """ Get efforts cell, grouped by time. """
+    def get_effort_cache(self, cell_ids):
+        """ Get efforts cache, grouped by cell and time. """
         effort_cache = {}
-        for t in range(self.t0, self.tf + 1, self.dt):
-            effort_cache[t] = self.dao.query({
-                'SELECT': '__Effort',
-                'WHERE': [[{'TYPE': 'ENTITY', 
-                            'EXPRESSION': '__Effort__cell_id'},
-                           '==', cell_id]],
-            })
+        Effort = self.dao.schema['sources']['Effort']
+        effort_q = self.dao.session.query(Effort)
+        efforts = effort_q.filter(Effort.cell_id.in_(cell_ids)).all()
+        for effort in efforts:
+            cell_efforts = effort_cache.setdefault(effort.cell_id, {})
+            time_efforts = cell_efforts.setdefault(effort.time, [])
+            time_efforts.append(effort)
         return effort_cache
 
-    def get_results_for_cell_by_t_rkey(self, cell_id):
-        """ Get results cell, grouped by time and result key. """
+    def get_result_cache(self, cell_ids):
+        """ Get results cache, grouped by cell, time, and result key. """
         result_cache = {}
-        for t in range(self.t0, self.tf + 1, self.dt):
-            result_cache[t] = {}
-        cell_results = self.dao.query({
-            'SELECT': '__Result',
-            'WHERE': [[{'TYPE': 'ENTITY', 
-                        'EXPRESSION': '__Result__cell_id'},
-                       '==', cell_id]],
-        })
-        for r in cell_results:
-            key = (r.substrate, r.energy, r.gear_id, r.feature)
-            result_cache[t][result_key] = result
+        for cell_id in cell_ids:
+            cell_results = result_cache.setdefault(cell_id, {})
+            for t in range(self.t0, self.tf + 1, self.dt):
+                time_results = cell_results.setdefault(t, {})
         return result_cache
 
     def get_or_create_result(self, result_cache, t, cell_id, result_key):
@@ -252,7 +249,7 @@ class SASI_Model(object):
         gear_id = result_key[2]
         feature_id = result_key[3]
 
-        if not result_cache[t].has_key(result_key):
+        if not result_cache[cell_id][t].has_key(result_key):
             new_result = self.dao.schema['sources']['Result'](
                 t=t,
                 cell_id=cell_id,
@@ -266,6 +263,6 @@ class SASI_Model(object):
                 z=0.0,
                 znet=0.0,
             )
-            result_cache[t][result_key] = new_result
+            result_cache[cell_id][t][result_key] = new_result
 
-        return result_cache[t][result_key]
+        return result_cache[cell_id][t][result_key]
