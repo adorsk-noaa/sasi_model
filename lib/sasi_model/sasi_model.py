@@ -4,10 +4,9 @@ import logging
 class SASI_Model(object):
 
     def __init__(self, t0=0, tf=10, dt=1, taus=None, omegas=None, dao=None, 
-                 logger=logging.getLogger(), config={}):
+                 logger=logging.getLogger(), batch_size=100, **kwargs):
 
         self.logger = logger
-        self.config = {}
 
         self.t0 = t0 # Start time
         self.tf = tf # End time
@@ -33,6 +32,8 @@ class SASI_Model(object):
         self.omegas = omegas
 
         self.dao = dao
+
+        self.batch_size = batch_size
 
         self.setup()
 
@@ -102,7 +103,8 @@ class SASI_Model(object):
                     c_ht_fc_f[c.id]['ht'][ht]['fc'][fc] = fs
         return c_ht_fc_f
 
-    def run(self, log_interval=1, commit=True, batch_size=100):
+    def run(self, log_interval=1, commit=True, batch_size=self.batch_size,
+            **kwargs):
         self.logger.info("Iterating through cells...")
         # We partition by cells to avoid overloading memory.
         # 'Cuz there can be a lotta data...
