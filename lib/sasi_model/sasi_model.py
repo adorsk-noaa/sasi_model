@@ -103,8 +103,10 @@ class SASI_Model(object):
                     c_ht_fc_f[c.id]['ht'][ht]['fc'][fc] = fs
         return c_ht_fc_f
 
-    def run(self, log_interval=1, commit=True, batch_size=self.batch_size,
-            **kwargs):
+    def run(self, log_interval=1, commit=True, **kwargs):
+
+        batch_size = kwargs.get('batch_size', 100)
+
         self.logger.info("Iterating through cells...")
         # We partition by cells to avoid overloading memory.
         # 'Cuz there can be a lotta data...
