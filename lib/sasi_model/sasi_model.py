@@ -180,7 +180,9 @@ class SASI_Model(object):
                                             omega = self.omegas[va.s]
                                             tau = self.taus[va.r]
 
-                                            result_key = (ht[0], ht[1], effort.gear_id, f)
+                                            result_key = (
+                                                ht[0], ht[1], effort.gear_id, f, fc
+                                            )
                                             result = self.get_or_create_result(
                                                 result_cache, t, c, result_key)
 
@@ -254,6 +256,7 @@ class SASI_Model(object):
         energy_id = result_key[1]
         gear_id = result_key[2]
         feature_id = result_key[3]
+        feature_category_id = result_key[4]
 
         if not result_cache[cell_id][t].has_key(result_key):
             new_result = self.dao.schema['sources']['Result'](
@@ -263,6 +266,7 @@ class SASI_Model(object):
                 substrate_id=substrate_id,
                 energy_id=energy_id,
                 feature_id=feature_id,
+                feature_category_id=feature_category_id,
                 a=0.0,
                 x=0.0,
                 y=0.0,
