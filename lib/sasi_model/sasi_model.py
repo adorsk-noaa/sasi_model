@@ -223,7 +223,7 @@ class SASI_Model(object):
             for cell_results in result_cache.values():
                 for time_results in cell_results.values():
                     for result in time_results.values():
-                        self.dao.save(result, auto_commit=False)
+                        self.dao.save(result, commit=False)
             if commit:
                 self.logger.info('saving partial results...')
                 self.dao.commit()
